@@ -1,19 +1,16 @@
-use crate::mir::id::{BlockId, FrameId, IndexVec, InstrId, PRegId, VRegId};
-use crate::mir::instr::{MirInstr, Phi};
-use crate::mir::types::{RegClass, Type};
+use crate::id::IndexVec;
+use crate::mir::id::{BlockId, FrameId, PRegId, VRegId};
+use crate::mir::instr::MirInstr;
+use crate::mir::opcode::Backend;
 use crate::support::Symbol;
+use crate::types::{RegClass, Type};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StackSlotUsage {
-    /// 传入参数（当前函数帧内的 incoming args）
     Arg,
-    /// 传出参数区（调用其他函数时使用）
     CalleeArg,
-    /// callee-saved 寄存器保存
     CalleeSave,
-    /// 局部变量 / alloca 对象
     Local,
-    /// 溢出槽
     Spill,
 }
 
@@ -49,105 +46,64 @@ impl Default for FrameInfo {
 
 impl FrameInfo {
     pub fn create_slot(
-        &mut self,
-        size: u32,
-        align: u32,
-        usage: StackSlotUsage,
+        &mut self, 
+        size: u32, 
+        align: u32, 
+        usage: StackSlotUsage
     ) -> FrameId {
-        self.create_slot_with_arg_index(size, align, usage, None)
-    }
-
-    pub fn create_arg_slot(
-        &mut self,
-        size: u32,
-        align: u32,
-        usage: StackSlotUsage,
-        arg_index: u32,
-    ) -> FrameId {
-        debug_assert!(
-            matches!(usage, StackSlotUsage::Arg | StackSlotUsage::CalleeArg),
-            "create_arg_slot 只用于 Arg / CalleeArg"
-        );
-        self.create_slot_with_arg_index(size, align, usage, Some(arg_index))
-    }
-
-    fn create_slot_with_arg_index(
-        &mut self,
-        size: u32,
-        align: u32,
-        usage: StackSlotUsage,
-        arg_index: Option<u32>,
-    ) -> FrameId {
-        self.slots.push(StackSlot {
-            size,
-            align,
-            offset: None,
-            usage,
-            arg_index,
+        self.slots.push(StackSlot { 
+            size, 
+            align, 
+            offset: None, 
+            usage, arg_index: None 
         })
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Phi {
+    pub dest: VRegId,
+    pub incoming: Vec<(BlockId, VRegId)>,
 }
 
 #[derive(Clone, Debug)]
 pub struct VRegInfo {
     pub ty: Type,
     pub class: Option<RegClass>,
-    pub def: Option<(BlockId, InstrId)>,
     pub assigned: Option<PRegId>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct MirBlock {
+#[derive(Clone, Debug)]
+pub struct MirBlock<B: Backend> {
     pub phis: Vec<Phi>,
-    pub instrs: Vec<MirInstr>,
+    pub instrs: Vec<MirInstr<B>>,
     pub preds: Vec<BlockId>,
     pub succs: Vec<BlockId>,
 }
 
-impl MirBlock {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn insert_before_terminator(&mut self, instr: MirInstr) {
-        debug_assert!(
-            !instr.is_terminator(),
-            "insert_before_terminator 不接受 terminator"
-        );
-        let pos = self
-            .instrs
-            .iter()
-            .position(|i| i.is_terminator())
-            .unwrap_or(self.instrs.len());
-        self.instrs.insert(pos, instr);
-    }
-
-    pub fn terminator(&self) -> Option<&MirInstr> {
-        self.instrs.last().filter(|i| i.is_terminator())
-    }
-}
-
 #[derive(Clone, Debug)]
-pub struct MirFunction {
+pub struct MirFunction<B: Backend> {
     pub name: Symbol,
-    pub blocks: IndexVec<BlockId, MirBlock>,
+    pub blocks: IndexVec<BlockId, MirBlock<B>>,
     pub vregs: IndexVec<VRegId, VRegInfo>,
-    pub args: Vec<VRegId>,
     pub frame: FrameInfo,
+    pub args: Vec<VRegId>,
     pub entry: BlockId,
+    pub exit_blocks: Vec<BlockId>,
     pub is_leaf: bool,
     pub is_entry: bool,
 }
 
-impl MirFunction {
+impl<B: Backend> MirFunction<B> {
     pub fn new(name: Symbol) -> Self {
         let mut f = MirFunction {
             name,
             blocks: IndexVec::new(),
             vregs: IndexVec::new(),
-            args: Vec::new(),
             frame: FrameInfo::default(),
+            args: Vec::new(),
             entry: BlockId::new(0),
+            exit_blocks: Vec::new(),
             is_leaf: true,
             is_entry: false,
         };
@@ -156,45 +112,51 @@ impl MirFunction {
     }
 
     pub fn new_block(&mut self) -> BlockId {
-        self.blocks.push(MirBlock::new())
+        self.blocks.push(MirBlock::default())
     }
 
     pub fn new_vreg(&mut self, ty: Type) -> VRegId {
-        self.vregs.push(VRegInfo {
-            ty,
-            class: None,
-            def: None,
-            assigned: None,
-        })
+        self.vregs.push(VRegInfo { ty, class: None, assigned: None })
     }
-    
-    pub fn new_arg_vreg(&mut self, ty: Type) -> VRegId {
+
+    pub fn new_arg(&mut self, ty: Type) -> VRegId {
         let v = self.new_vreg(ty);
         self.args.push(v);
         v
     }
 
-    pub fn is_arg(&self, v: VRegId) -> bool {
-        self.args.contains(&v)
+    pub fn block(&self, id: BlockId) -> &MirBlock<B> { 
+        &self.blocks[id] 
     }
 
-    pub fn block(&self, id: BlockId) -> &MirBlock {
-        &self.blocks[id]
+    pub fn block_mut(&mut self, id: BlockId) -> &mut MirBlock<B> { 
+        &mut self.blocks[id] 
     }
 
-    pub fn block_mut(&mut self, id: BlockId) -> &mut MirBlock {
-        &mut self.blocks[id]
+    pub fn vreg(&self, id: VRegId) -> &VRegInfo { 
+        &self.vregs[id] 
     }
 
-    pub fn vreg(&self, id: VRegId) -> &VRegInfo {
-        &self.vregs[id]
+    pub fn vreg_mut(&mut self, id: VRegId) -> &mut VRegInfo { 
+        &mut self.vregs[id] 
     }
 
-    pub fn vreg_mut(&mut self, id: VRegId) -> &mut VRegInfo {
-        &mut self.vregs[id]
+    pub fn slot(&self, id: FrameId) -> &StackSlot { 
+        &self.frame.slots[id] 
     }
 
-    pub fn slot(&self, id: FrameId) -> &StackSlot {
-        &self.frame.slots[id]
+    pub fn is_arg(&self, v: VRegId) -> bool { 
+        self.args.contains(&v) 
+    }
+}
+
+impl<B: Backend> Default for MirBlock<B> {
+    fn default() -> Self {
+        Self {
+            phis: Vec::new(),
+            instrs: Vec::new(),
+            preds: Vec::new(),
+            succs: Vec::new(),
+        }
     }
 }

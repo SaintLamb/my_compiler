@@ -1,66 +1,33 @@
+use crate::mir::id::{BlockId, FrameId, VRegId};
 use crate::mir::function::{MirFunction, StackSlotUsage};
-use crate::mir::id::{BlockId, FrameId, InstrId, VRegId};
-use crate::mir::instr::{MirInstr, Phi};
-use crate::mir::operand::{OpFlags, Operand, Reg};
-use crate::mir::opcode::GenericOp;
-use crate::mir::types::Type;
+use crate::mir::instr::MirInstr;
+use crate::mir::opcode::{Backend, OpCode};
+use crate::mir::operand::MirOperand;
+use crate::types::Type;
 
-pub struct Builder<'a> {
-    func: &'a mut MirFunction,
+pub struct MirBuilder<'a, B: Backend> {
+    func: &'a mut MirFunction<B>,
 }
 
-impl<'a> Builder<'a> {
-    pub fn new(func: &'a mut MirFunction) -> Self {
-        Builder { func }
+impl<'a, B: Backend> MirBuilder<'a, B> {
+    pub fn new(func: &'a mut MirFunction<B>) -> Self {
+        MirBuilder { func }
     }
 
-    pub fn func(&self) -> &MirFunction {
-        self.func
-    }
+    pub fn func(&self) -> &MirFunction<B> { self.func }
+    pub fn new_block(&mut self) -> BlockId { self.func.new_block() }
+    pub fn new_vreg(&mut self, ty: Type) -> VRegId { self.func.new_vreg(ty) }
+    pub fn new_arg(&mut self, ty: Type) -> VRegId { self.func.new_arg(ty) }
 
-    pub fn new_block(&mut self) -> BlockId {
-        self.func.new_block()
-    }
-
-    pub fn new_vreg(&mut self, ty: Type) -> VRegId {
-        self.func.new_vreg(ty)
-    }
-    pub fn new_arg(&mut self, ty: Type) -> VRegId {
-        self.func.new_arg_vreg(ty)
-    }
-    pub fn push(
-        &mut self,
-        block: BlockId,
-        opcode: GenericOp,
-        operands: Vec<Operand>,
-    ) -> InstrId {
-        let instr_idx = u32::try_from(self.func.block(block).instrs.len())
-            .expect("block has too many instructions");
-        let instr_id = InstrId::new(instr_idx);
-
-        for op in &operands {
-            if op.flags().contains(OpFlags::DEF) {
-                if let Operand::Reg(Reg::Virtual(v), _) = op {
-                    debug_assert!(
-                        self.func.vreg(*v).def.is_none(),
-                        "vreg {v:?} defined twice"
-                    );
-                    self.func.vreg_mut(*v).def = Some((block, instr_id));
-                }
-            }
+    pub fn push(&mut self, block: BlockId, opcode: B::OpCode, operands: Vec<MirOperand>) {
+        if opcode.is_terminator() && !self.func.exit_blocks.contains(&block) {
+            self.func.exit_blocks.push(block);
         }
-
-        if opcode == GenericOp::Call {
-            self.func.is_leaf = false;
-        }
-
-        let instr = MirInstr { opcode, operands };
-        self.func.block_mut(block).instrs.push(instr);
-        instr_id
+        self.func.block_mut(block).instrs.push(MirInstr::new(opcode, operands));
     }
 
-    pub fn add_phi(&mut self, block: BlockId, phi: Phi) {
-        self.func.block_mut(block).phis.push(phi);
+    pub fn create_slot(&mut self, size: u32, align: u32, usage: StackSlotUsage) -> FrameId {
+        self.func.frame.create_slot(size, align, usage)
     }
 
     pub fn add_edge(&mut self, from: BlockId, to: BlockId) {
@@ -68,34 +35,6 @@ impl<'a> Builder<'a> {
         self.func.block_mut(to).preds.push(from);
     }
 
-    pub fn create_slot(
-        &mut self,
-        size: u32,
-        align: u32,
-        usage: StackSlotUsage,
-    ) -> FrameId {
-        self.func.frame.create_slot(size, align, usage)
-    }
-
-    pub fn create_arg_slot(
-        &mut self,
-        size: u32,
-        align: u32,
-        usage: StackSlotUsage,
-        arg_index: u32,
-    ) -> FrameId {
-        self.func.frame.create_arg_slot(size, align, usage, arg_index)
-    }
-
-    pub fn set_entry(&mut self, block: BlockId) {
-        self.func.entry = block;
-    }
-
-    pub fn set_is_leaf(&mut self, leaf: bool) {
-        self.func.is_leaf = leaf;
-    }
-
-    pub fn set_is_entry(&mut self, entry: bool) {
-        self.func.is_entry = entry;
-    }
+    pub fn set_entry(&mut self, block: BlockId) { self.func.entry = block; }
+    pub fn set_is_leaf(&mut self, leaf: bool) { self.func.is_leaf = leaf; }
 }

@@ -1,7 +1,5 @@
-use std::fmt;
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Symbol(pub String);
+pub struct Symbol(String);
 
 impl Symbol {
     pub fn new(s: impl Into<String>) -> Self {
@@ -14,18 +12,12 @@ impl Symbol {
 
 impl From<&str> for Symbol {
     fn from(s: &str) -> Self {
-        Symbol(s.into())
+        Symbol(s.to_string())
     }
 }
 
-impl From<String> for Symbol {
-    fn from(s: String) -> Self {
-        Symbol(s)
-    }
-}
-
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
