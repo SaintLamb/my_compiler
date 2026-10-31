@@ -26,6 +26,7 @@ impl Type {
             Type::CondFlag | Type::Special => 0, 
         }
     }
+
     pub fn narrowest(types: &[Type]) -> u16 {
         types
             .iter()
@@ -34,6 +35,7 @@ impl Type {
             .min()
             .unwrap()
     }
+
     pub fn widest(types: &[Type]) -> u16 {
         types
             .iter()
@@ -72,6 +74,7 @@ impl Cond {
             other => other,
         }
     }
+    
     pub fn flip(self) -> Cond {
         match self {
             Cond::Ne => Cond::Eq,

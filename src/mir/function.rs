@@ -1,4 +1,4 @@
-use crate::mir::id::{BlockId, FrameId, IndexVec, InstId, PRegId, VRegId};
+use crate::mir::id::{BlockId, FrameId, IndexVec, InstrId, PRegId, VRegId};
 use crate::mir::instr::{MirInstr, Phi};
 use crate::mir::types::{RegClass, Type};
 use crate::support::Symbol;
@@ -92,7 +92,7 @@ impl FrameInfo {
 pub struct VRegInfo {
     pub ty: Type,
     pub class: Option<RegClass>,
-    pub def: Option<(BlockId, InstId)>,
+    pub def: Option<(BlockId, InstrId)>,
     pub assigned: Option<PRegId>,
 }
 
@@ -132,6 +132,7 @@ pub struct MirFunction {
     pub name: Symbol,
     pub blocks: IndexVec<BlockId, MirBlock>,
     pub vregs: IndexVec<VRegId, VRegInfo>,
+    pub args: Vec<VRegId>,
     pub frame: FrameInfo,
     pub entry: BlockId,
     pub is_leaf: bool,
@@ -144,6 +145,7 @@ impl MirFunction {
             name,
             blocks: IndexVec::new(),
             vregs: IndexVec::new(),
+            args: Vec::new(),
             frame: FrameInfo::default(),
             entry: BlockId::new(0),
             is_leaf: true,
@@ -164,6 +166,16 @@ impl MirFunction {
             def: None,
             assigned: None,
         })
+    }
+    
+    pub fn new_arg_vreg(&mut self, ty: Type) -> VRegId {
+        let v = self.new_vreg(ty);
+        self.args.push(v);
+        v
+    }
+
+    pub fn is_arg(&self, v: VRegId) -> bool {
+        self.args.contains(&v)
     }
 
     pub fn block(&self, id: BlockId) -> &MirBlock {

@@ -30,7 +30,7 @@ pub trait Idx: Copy {
 
 define_id!(VRegId);
 define_id!(BlockId);
-define_id!(InstId);
+define_id!(InstrId);
 define_id!(FrameId);
 define_id!(PRegId);
 
@@ -46,37 +46,54 @@ impl<I: Idx, T> IndexVec<I, T> {
             _marker: std::marker::PhantomData,
         }
     }
+
     pub fn push(&mut self, val: T) -> I {
         let id = I::from_usize(self.data.len());
         self.data.push(val);
         id
     } 
+
     pub fn len(&self) -> usize {
         self.data.len()
     }
+
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
+
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
     }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.data.iter_mut()
     }
+
     pub fn indices(&self) -> impl Iterator<Item = I> {
         (0..self.data.len()).map(I::from_usize)
     }
+
     pub fn iter_enumerated(&self) -> impl Iterator<Item = (I, &T)> {
         self.data
             .iter()
             .enumerate()
             .map(|(i, v)| (I::from_usize(i), v))
     }
+
     pub fn iter_enumerated_mut(&mut self) -> impl Iterator<Item = (I, &mut T)> {
         self.data
             .iter_mut()
             .enumerate()
             .map(|(i, v)| (I::from_usize(i), v))
+    }
+}
+
+impl<I: Idx, T: Clone> IndexVec<I, T> {
+    pub fn with_len(len: usize, value: T) -> Self {
+        IndexVec {
+            data: vec![value; len],
+            _marker: std::marker::PhantomData,
+        }
     }
 }
 

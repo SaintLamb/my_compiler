@@ -126,9 +126,11 @@ impl Opcode for GenericOp {
     fn name(self) -> &'static str {
         GenericOp::name(self)
     }
+
     fn is_terminator(self) -> bool {
         GenericOp::is_terminator(self)
     }
+    
     fn branch_target_operand_indices(self) -> &'static [usize] {
         GenericOp::branch_target_operand_indices(self)
     }

@@ -7,7 +7,16 @@ use std::fmt::Write;
 
 pub fn print_function(f: &MirFunction) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "fn {}:", f.name);
+    let _ = write!(out, "fn {}(", f.name);
+
+    for (i, &arg) in f.args.iter().enumerate() {
+        if i > 0 {
+            let _ = write!(out, ", ");
+        }
+        let _ = write!(out, "%{}{}", arg.raw(), type_suffix(f.vreg(arg).ty));
+    }
+
+    let _ = writeln!(out, "):");
 
     for (block_id, block) in f.blocks.iter_enumerated() {
         let _ = writeln!(out, "  {}:", block_label(block_id));

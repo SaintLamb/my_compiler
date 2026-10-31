@@ -64,7 +64,7 @@ impl Phi {
             incoming: Vec::new(),
         }
     }
-
+    
     pub fn add(&mut self, from: BlockId, val: VRegId) {
         self.incoming.push((from, val));
     }

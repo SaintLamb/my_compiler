@@ -40,3 +40,40 @@ fn test_print_add() {
 
     println!("{}", print_function(&f));
 }
+
+#[test]
+fn test_print_add_with_args() {
+    let mut f = MirFunction::new(Symbol::from("add"));
+    let entry = f.entry;
+    let mut b = Builder::new(&mut f);
+
+    let a = b.new_arg(Type::I32);
+    let c = b.new_arg(Type::I32);
+    let r = b.new_vreg(Type::I32);
+
+    b.push(
+        entry,
+        GenericOp::Add,
+        vec![
+            Operand::vreg_def(r),
+            Operand::vreg_use(a),
+            Operand::vreg_use(c),
+        ],
+    );
+    b.push(entry, GenericOp::Ret, vec![Operand::vreg_use(r)]);
+
+    assert_eq!(f.args, vec![a, c]);
+
+    if let Err(errs) = verify(&f, Stage::PostLowering) {
+        for e in &errs {
+            eprintln!("verify error: {e}");
+        }
+        panic!("verify failed");
+    }
+
+    let out = print_function(&f);
+    println!("{out}");
+
+    assert!(out.contains("%2:i32 = add %0:i32, %1:i32"), "got:\n{out}");
+    assert!(out.contains("ret %2:i32"), "got:\n{out}");
+}

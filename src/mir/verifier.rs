@@ -1,5 +1,5 @@
 use crate::mir::function::MirFunction;
-use crate::mir::id::{BlockId, VRegId, Idx};
+use crate::mir::id::{BlockId, VRegId, IndexVec};
 use crate::mir::operand::{OpFlags, Operand, Reg};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,24 +56,24 @@ impl std::error::Error for VerifyError {}
 pub fn verify(f: &MirFunction, stage: Stage) -> Result<(), Vec<VerifyError>> {
     let mut errors = Vec::new();
 
-    let mut def_counts = vec![0u32; f.vregs.len()];
-    let mut use_counts = vec![0u32; f.vregs.len()];
+    let mut def_counts: IndexVec<VRegId, u32> = IndexVec::with_len(f.vregs.len(), 0);
+    let mut use_counts: IndexVec<VRegId, u32> = IndexVec::with_len(f.vregs.len(), 0);
 
     for block in f.blocks.iter() {
         for phi in &block.phis {
-            def_counts[phi.dest.index()] += 1;
+            def_counts[phi.dest] += 1;
             for (_, val) in &phi.incoming {
-                use_counts[val.index()] += 1;
+                use_counts[*val] += 1;
             }
         }
         for instr in &block.instrs {
             for op in &instr.operands {
                 if let Operand::Reg(Reg::Virtual(v), flags) = op {
                     if flags.contains(OpFlags::DEF) {
-                        def_counts[v.index()] += 1;
+                        def_counts[*v] += 1;
                     }
                     if flags.contains(OpFlags::USE) {
-                        use_counts[v.index()] += 1;
+                        use_counts[*v] += 1;
                     }
                 }
             }
@@ -81,7 +81,15 @@ pub fn verify(f: &MirFunction, stage: Stage) -> Result<(), Vec<VerifyError>> {
     }
 
     for (v_id, _info) in f.vregs.iter_enumerated() {
-        let defs = def_counts[v_id.index()];
+        if f.is_arg(v_id) {
+            debug_assert!(
+                def_counts[v_id] == 0,
+                "arg vreg %{} 不应有显式DEF",
+                v_id.raw()
+            );
+            continue;
+        }
+        let defs = def_counts[v_id];
         if defs > 1 {
             errors.push(VerifyError::VRegMultipleDefs(v_id));
         } else if defs == 0 {
@@ -128,7 +136,10 @@ pub fn verify(f: &MirFunction, stage: Stage) -> Result<(), Vec<VerifyError>> {
     }
 
     for (v_id, _info) in f.vregs.iter_enumerated() {
-        if use_counts[v_id.index()] > 0 && def_counts[v_id.index()] == 0 {
+        if f.is_arg(v_id) {
+            continue;
+        }
+        if use_counts[v_id] > 0 && def_counts[v_id] == 0 {
             errors.push(VerifyError::VRegUndefinedUse(v_id));
         }
     }

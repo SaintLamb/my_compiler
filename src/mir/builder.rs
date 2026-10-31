@@ -1,5 +1,5 @@
 use crate::mir::function::{MirFunction, StackSlotUsage};
-use crate::mir::id::{BlockId, FrameId, InstId, VRegId};
+use crate::mir::id::{BlockId, FrameId, InstrId, VRegId};
 use crate::mir::instr::{MirInstr, Phi};
 use crate::mir::operand::{OpFlags, Operand, Reg};
 use crate::mir::opcode::GenericOp;
@@ -25,16 +25,18 @@ impl<'a> Builder<'a> {
     pub fn new_vreg(&mut self, ty: Type) -> VRegId {
         self.func.new_vreg(ty)
     }
-
+    pub fn new_arg(&mut self, ty: Type) -> VRegId {
+        self.func.new_arg_vreg(ty)
+    }
     pub fn push(
         &mut self,
         block: BlockId,
         opcode: GenericOp,
         operands: Vec<Operand>,
-    ) -> InstId {
-        let inst_idx = u32::try_from(self.func.block(block).instrs.len())
+    ) -> InstrId {
+        let instr_idx = u32::try_from(self.func.block(block).instrs.len())
             .expect("block has too many instructions");
-        let inst_id = InstId::new(inst_idx);
+        let instr_id = InstrId::new(instr_idx);
 
         for op in &operands {
             if op.flags().contains(OpFlags::DEF) {
@@ -43,7 +45,7 @@ impl<'a> Builder<'a> {
                         self.func.vreg(*v).def.is_none(),
                         "vreg {v:?} defined twice"
                     );
-                    self.func.vreg_mut(*v).def = Some((block, inst_id));
+                    self.func.vreg_mut(*v).def = Some((block, instr_id));
                 }
             }
         }
@@ -52,9 +54,9 @@ impl<'a> Builder<'a> {
             self.func.is_leaf = false;
         }
 
-        let inst = MirInstr { opcode, operands };
-        self.func.block_mut(block).instrs.push(inst);
-        inst_id
+        let instr = MirInstr { opcode, operands };
+        self.func.block_mut(block).instrs.push(instr);
+        instr_id
     }
 
     pub fn add_phi(&mut self, block: BlockId, phi: Phi) {

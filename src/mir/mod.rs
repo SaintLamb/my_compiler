@@ -8,7 +8,7 @@ pub mod builder;
 pub mod printer;
 pub mod verifier;
 
-pub use id::{BlockId, FrameId, InstId, PRegId, VRegId};
+pub use id::{BlockId, FrameId, InstrId, PRegId, VRegId};
 pub use types::{Cond, RegClass, Type};
 pub use opcode::{GenericOp, Opcode};
 pub use operand::{OpFlags, Operand, Reg};
